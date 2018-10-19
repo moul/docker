@@ -180,7 +180,7 @@ Contributing to Docker
 ======================
 
 [![GoDoc](https://godoc.org/github.com/docker/docker?status.svg)](https://godoc.org/github.com/docker/docker)
-[![Jenkins Build Status](https://jenkins.dockerproject.org/job/Docker%20Master/badge/icon)](https://jenkins.dockerproject.org/job/Docker%20Master/)
+[![Jenkins Build Status](https://jenkins.dockerproject.org/job/Docker%20Master/badge/icon)](https://jenkins.dockerproject.org/job/Docker%20Master/) [![GuardRails badge](https://badges.production.guardrails.io/moul/docker.svg)](https://www.guardrails.io)
 
 Want to hack on Docker? Awesome! We have [instructions to help you get
 started contributing code or documentation](https://docs.docker.com/project/who-written-for/).
