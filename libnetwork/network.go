@@ -158,7 +158,7 @@ func (i *IpamInfo) UnmarshalJSON(data []byte) error {
 	}
 	i.PoolID = m["PoolID"].(string)
 	if v, ok := m["Meta"]; ok {
-		b, _ := json.Marshal(v)
+		b, _ := json.Marshal(v) //nolint:errchkjson // FIXME: handle json (Un)Marshal errors
 		if err = json.Unmarshal(b, &i.Meta); err != nil {
 			return err
 		}
@@ -1177,7 +1177,7 @@ func (n *Network) addEndpoint(ctx context.Context, ep *Endpoint) error {
 func (n *Network) CreateEndpoint(ctx context.Context, name string, options ...EndpointOption) (*Endpoint, error) {
 	var err error
 	if strings.TrimSpace(name) == "" {
-		return nil, ErrInvalidName(name)
+		return nil, types.InvalidParameterErrorf("invalid name: name is empty")
 	}
 
 	if n.ConfigOnly() {
@@ -1310,10 +1310,10 @@ func (n *Network) WalkEndpoints(walker EndpointWalker) {
 }
 
 // EndpointByName returns the Endpoint which has the passed name. If not found,
-// the error ErrNoSuchEndpoint is returned.
+// an [errdefs.ErrNotFound] is returned.
 func (n *Network) EndpointByName(name string) (*Endpoint, error) {
 	if name == "" {
-		return nil, ErrInvalidName(name)
+		return nil, types.InvalidParameterErrorf("invalid name: name is empty")
 	}
 	var e *Endpoint
 
@@ -1328,25 +1328,10 @@ func (n *Network) EndpointByName(name string) (*Endpoint, error) {
 	n.WalkEndpoints(s)
 
 	if e == nil {
-		return nil, ErrNoSuchEndpoint(name)
+		return nil, errdefs.NotFound(fmt.Errorf("endpoint %s not found", name))
 	}
 
 	return e, nil
-}
-
-// EndpointByID should *never* be called as it's going to create a 2nd instance of an Endpoint. The first one lives in
-// the Sandbox the endpoint is attached to. Instead, the endpoint should be retrieved by calling [Sandbox.Endpoints()].
-func (n *Network) EndpointByID(id string) (*Endpoint, error) {
-	if id == "" {
-		return nil, ErrInvalidID(id)
-	}
-
-	ep, err := n.getEndpointFromStore(id)
-	if err != nil {
-		return nil, ErrNoSuchEndpoint(id)
-	}
-
-	return ep, nil
 }
 
 // updateSvcRecord adds or deletes local DNS records for a given Endpoint.

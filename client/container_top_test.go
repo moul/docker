@@ -23,6 +23,14 @@ func TestContainerTopError(t *testing.T) {
 	}
 	_, err := client.ContainerTop(context.Background(), "nothing", []string{})
 	assert.Check(t, is.ErrorType(err, errdefs.IsSystem))
+
+	_, err = client.ContainerTop(context.Background(), "", []string{})
+	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
+	assert.Check(t, is.ErrorContains(err, "value is empty"))
+
+	_, err = client.ContainerTop(context.Background(), "    ", []string{})
+	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
+	assert.Check(t, is.ErrorContains(err, "value is empty"))
 }
 
 func TestContainerTop(t *testing.T) {
@@ -44,7 +52,7 @@ func TestContainerTop(t *testing.T) {
 				return nil, fmt.Errorf("args not set in URL query properly. Expected 'arg1 arg2', got %v", args)
 			}
 
-			b, err := json.Marshal(container.ContainerTopOKBody{
+			b, err := json.Marshal(container.TopResponse{
 				Processes: [][]string{
 					{"p1", "p2"},
 					{"p3"},

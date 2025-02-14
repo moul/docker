@@ -552,7 +552,7 @@ func TestControllerQuery(t *testing.T) {
 
 	_, err = controller.NetworkByID("")
 	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
-	assert.Check(t, is.ErrorContains(err, "invalid id:"))
+	assert.Check(t, is.Error(err, "invalid id: id is empty"))
 
 	g, err := controller.NetworkByID("network1")
 	assert.Check(t, is.ErrorType(err, errdefs.IsNotFound))
@@ -619,14 +619,6 @@ func TestNetworkQuery(t *testing.T) {
 	assert.Check(t, is.ErrorType(err, errdefs.IsNotFound))
 	assert.Check(t, is.Error(err, "endpoint IamNotAnEndpoint not found"))
 	assert.Check(t, is.Nil(e), "EndpointByName() returned endpoint on error")
-
-	e, err = net1.EndpointByID(ep12.ID())
-	assert.NilError(t, err)
-	assert.Check(t, is.Equal(e.ID(), ep12.ID()), "EndpointByID() returned the wrong endpoint")
-
-	_, err = net1.EndpointByID("")
-	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
-	assert.Check(t, is.ErrorContains(err, "invalid id:"))
 }
 
 const containerID = "valid_c"

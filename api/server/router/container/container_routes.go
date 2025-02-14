@@ -71,7 +71,7 @@ func (c *containerRouter) postCommit(ctx context.Context, w http.ResponseWriter,
 		return err
 	}
 
-	return httputils.WriteJSON(w, http.StatusCreated, &types.IDResponse{ID: imgID})
+	return httputils.WriteJSON(w, http.StatusCreated, &container.CommitResponse{ID: imgID})
 }
 
 func (c *containerRouter) getContainersJSON(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
@@ -110,6 +110,13 @@ func (c *containerRouter) getContainersJSON(ctx context.Context, w http.Response
 		for _, c := range containers {
 			// Ignore HostConfig.Annotations because it was added in API v1.46.
 			c.HostConfig.Annotations = nil
+		}
+	}
+
+	if versions.LessThan(version, "1.48") {
+		// ImageManifestDescriptor information was added in API 1.48
+		for _, c := range containers {
+			c.ImageManifestDescriptor = nil
 		}
 	}
 
@@ -649,6 +656,11 @@ func (c *containerRouter) postContainersCreate(ctx context.Context, w http.Respo
 			// reinitialize this field.
 			epConfig.GwPriority = 0
 		}
+		for _, m := range hostConfig.Mounts {
+			if m.Type == mount.TypeImage {
+				return errdefs.InvalidParameter(errors.New(`Mount type "Image" needs API v1.48 or newer`))
+			}
+		}
 	}
 
 	var warnings []string
@@ -683,6 +695,12 @@ func (c *containerRouter) postContainersCreate(ctx context.Context, w http.Respo
 		Platform:                    platform,
 		DefaultReadOnlyNonRecursive: defaultReadOnlyNonRecursive,
 	})
+
+	// Log warnings for debugging, regardless if the request was successful or not.
+	if len(ccr.Warnings) > 0 {
+		log.G(ctx).WithField("warnings", ccr.Warnings).Debug("warnings encountered during container create request")
+	}
+
 	if err != nil {
 		return err
 	}

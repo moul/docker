@@ -1,18 +1,21 @@
 # syntax=docker/dockerfile:1.7
 
-ARG GO_VERSION=1.23.5
+ARG GO_VERSION=1.23.6
 ARG BASE_DEBIAN_DISTRO="bookworm"
 ARG GOLANG_IMAGE="golang:${GO_VERSION}-${BASE_DEBIAN_DISTRO}"
 ARG XX_VERSION=1.6.1
 
 ARG VPNKIT_VERSION=0.5.0
 
+# DOCKERCLI_VERSION is the version of the CLI to install in the dev-container.
+ARG DOCKERCLI_VERSION=v28.0.0-rc.1
 ARG DOCKERCLI_REPOSITORY="https://github.com/docker/cli.git"
-ARG DOCKERCLI_VERSION=v27.5.0
+
 # cli version used for integration-cli tests
 ARG DOCKERCLI_INTEGRATION_REPOSITORY="https://github.com/docker/cli.git"
 ARG DOCKERCLI_INTEGRATION_VERSION=v17.06.2-ce
-ARG BUILDX_VERSION=0.20.0
+# BUILDX_VERSION is the version of buildx to install in the dev container.
+ARG BUILDX_VERSION=0.20.1
 ARG COMPOSE_VERSION=v2.32.4
 
 ARG SYSTEMD="false"
@@ -230,14 +233,14 @@ FROM binary-dummy AS containerd-windows
 FROM containerd-${TARGETOS} AS containerd
 
 FROM base AS golangci_lint
-ARG GOLANGCI_LINT_VERSION=v1.62.0
+ARG GOLANGCI_LINT_VERSION=v1.63.4
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
         GOBIN=/build/ GO111MODULE=on go install "github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}" \
      && /build/golangci-lint --version
 
 FROM base AS gotestsum
-ARG GOTESTSUM_VERSION=v1.8.2
+ARG GOTESTSUM_VERSION=v1.12.0
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
         GOBIN=/build/ GO111MODULE=on go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}" \
@@ -266,7 +269,8 @@ RUN --mount=source=hack/dockerfile/cli.sh,target=/download-or-build-cli.sh \
     --mount=type=cache,target=/root/.cache/go-build,id=dockercli-build-$TARGETPLATFORM \
         rm -f ./.git/*.lock \
      && /download-or-build-cli.sh ${DOCKERCLI_VERSION} ${DOCKERCLI_REPOSITORY} /build \
-     && /build/docker --version
+     && /build/docker --version \
+     && /build/docker completion bash >/completion.bash
 
 FROM base AS dockercli-integration
 WORKDIR /go/src/github.com/docker/cli
@@ -288,7 +292,7 @@ RUN git init . && git remote add origin "https://github.com/opencontainers/runc.
 # that is used. If you need to update runc, open a pull request in the containerd
 # project first, and update both after that is merged. When updating RUNC_VERSION,
 # consider updating runc in vendor.mod accordingly.
-ARG RUNC_VERSION=v1.2.4
+ARG RUNC_VERSION=v1.2.5
 RUN git fetch -q --depth 1 origin "${RUNC_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
 
 FROM base AS runc-build
@@ -517,9 +521,8 @@ RUN useradd --create-home --gid docker unprivilegeduser \
  && chown -R unprivilegeduser /home/unprivilegeduser
 # Let us use a .bashrc file
 RUN ln -sfv /go/src/github.com/docker/docker/.bashrc ~/.bashrc
-# Activate bash completion and include Docker's completion if mounted with DOCKER_BASH_COMPLETION_PATH
+# Activate bash completion
 RUN echo "source /usr/share/bash-completion/bash_completion" >> /etc/bash.bashrc
-RUN ln -s /usr/local/completion/bash/docker /etc/bash_completion.d/docker
 RUN ldconfig
 # Set dev environment as safe git directory to prevent "dubious ownership" errors
 # when bind-mounting the source into the dev-container. See https://github.com/moby/moby/pull/44930
@@ -542,6 +545,7 @@ RUN --mount=type=cache,sharing=locked,id=moby-dev-aptlib,target=/var/lib/apt \
             libprotobuf-c1 \
             libyajl2 \
             net-tools \
+            netcat-openbsd \
             patch \
             pigz \
             sudo \
@@ -568,6 +572,7 @@ RUN --mount=type=cache,sharing=locked,id=moby-dev-aptlib,target=/var/lib/apt \
             libsystemd-dev \
             yamllint
 COPY --link --from=dockercli             /build/ /usr/local/cli
+COPY --link --from=dockercli             /completion.bash /etc/bash_completion.d/docker
 COPY --link --from=dockercli-integration /build/ /usr/local/cli-integration
 
 FROM base AS build

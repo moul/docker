@@ -134,7 +134,7 @@ func (test *testEndpoint) SetGatewayIPv6(ipv6 net.IP) error {
 	return nil
 }
 
-func (test *testEndpoint) SetNames(src string, dst string) error {
+func (test *testEndpoint) SetNames(_, _, _ string) error {
 	return nil
 }
 
@@ -144,4 +144,11 @@ func (test *testEndpoint) AddStaticRoute(destination *net.IPNet, routeType int, 
 
 func (test *testEndpoint) DisableGatewayService() {
 	test.disableGatewayService = true
+}
+
+func (test *testEndpoint) NetnsPath() string {
+	return ""
+}
+
+func (test *testEndpoint) SetCreatedInContainer(bool) {
 }

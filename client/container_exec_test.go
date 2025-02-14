@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/errdefs"
 	"gotest.tools/v3/assert"
@@ -21,8 +20,17 @@ func TestContainerExecCreateError(t *testing.T) {
 	client := &Client{
 		client: newMockClient(errorMock(http.StatusInternalServerError, "Server error")),
 	}
+
 	_, err := client.ContainerExecCreate(context.Background(), "container_id", container.ExecOptions{})
 	assert.Check(t, is.ErrorType(err, errdefs.IsSystem))
+
+	_, err = client.ContainerExecCreate(context.Background(), "", container.ExecOptions{})
+	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
+	assert.Check(t, is.ErrorContains(err, "value is empty"))
+
+	_, err = client.ContainerExecCreate(context.Background(), "    ", container.ExecOptions{})
+	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
+	assert.Check(t, is.ErrorContains(err, "value is empty"))
 }
 
 // TestContainerExecCreateConnectionError verifies that connection errors occurring
@@ -33,7 +41,7 @@ func TestContainerExecCreateConnectionError(t *testing.T) {
 	client, err := NewClientWithOpts(WithAPIVersionNegotiation(), WithHost("tcp://no-such-host.invalid"))
 	assert.NilError(t, err)
 
-	_, err = client.ContainerExecCreate(context.Background(), "", container.ExecOptions{})
+	_, err = client.ContainerExecCreate(context.Background(), "container_id", container.ExecOptions{})
 	assert.Check(t, is.ErrorType(err, IsErrConnectionFailed))
 }
 
@@ -58,7 +66,7 @@ func TestContainerExecCreate(t *testing.T) {
 			if execConfig.User != "user" {
 				return nil, fmt.Errorf("expected an execConfig with User == 'user', got %v", execConfig)
 			}
-			b, err := json.Marshal(types.IDResponse{
+			b, err := json.Marshal(container.ExecCreateResponse{
 				ID: "exec_id",
 			})
 			if err != nil {

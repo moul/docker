@@ -242,11 +242,12 @@ func (n *bridgeNetwork) setupIPTables(ipVersion iptables.IPVersion, maskedAddr *
 				return fmt.Errorf("failed to add bridge %s (%s) to ipset: %w",
 					config.BridgeName, maskedAddr, err)
 			}
+			// Re-adding an IP address to an ipset on firewalld reload is expected, not an error.
 			log.G(context.TODO()).WithFields(log.Fields{
 				"ipset":  ipsetName,
 				"bridge": config.BridgeName,
 				"subnet": maskedAddr,
-			}).Warnf("Subnet was already in the ipset")
+			}).Debug("Subnet was already in the ipset")
 		}
 		n.registerIptCleanFunc(func() error {
 			return netlink.IpsetDel(ipsetName, ipsetEntry)
@@ -762,15 +763,22 @@ func mirroredWSL2Workaround(config configuration, ipv iptables.IPVersion) error 
 //     the workaround, with improvements in WSL2 v2.3.11, and without userland proxy
 //     running - no workaround is needed, the normal DNAT/masquerading works.
 //   - and, the host Linux appears to be running under Windows WSL2 with mirrored
-//     mode networking. If a loopback0 device exists, and there's an executable at
-//     /usr/bin/wslinfo, infer that this is WSL2 with mirrored networking. ("wslinfo
-//     --networking-mode" reports "mirrored", but applying the workaround for WSL2's
-//     loopback device when it's not needed is low risk, compared with executing
-//     wslinfo with dockerd's elevated permissions.)
+//     mode networking.
 func insertMirroredWSL2Rule(config configuration) bool {
 	if !config.EnableUserlandProxy || config.UserlandProxyPath == "" {
 		return false
 	}
+	return isRunningUnderWSL2MirroredMode()
+}
+
+// isRunningUnderWSL2MirroredMode returns true if the host Linux appears to be
+// running under Windows WSL2 with mirrored mode networking. If a loopback0
+// device exists, and there's an executable at /usr/bin/wslinfo, infer that
+// this is WSL2 with mirrored networking. ("wslinfo --networking-mode" reports
+// "mirrored", but applying the workaround for WSL2's loopback device when it's
+// not needed is low risk, compared with executing wslinfo with dockerd's
+// elevated permissions.)
+func isRunningUnderWSL2MirroredMode() bool {
 	if _, err := nlwrap.LinkByName("loopback0"); err != nil {
 		if !errors.As(err, &netlink.LinkNotFoundError{}) {
 			log.G(context.TODO()).WithError(err).Warn("Failed to check for WSL interface")

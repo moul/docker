@@ -62,7 +62,7 @@ info:
     Engine releases in the near future should support this version of the API,
     so your client will continue to work even if it is talking to a newer Engine.
 
-    The API uses an open schema model, which means server may add extra properties
+    The API uses an open schema model, which means the server may add extra properties
     to responses. Likewise, the server will ignore any extra query parameters and
     request body properties. When you write clients, you need to ignore additional
     properties in responses to ensure they do not break when talking to newer
@@ -212,6 +212,7 @@ definitions:
 
           - `bind` a mount of a file or directory from the host into the container.
           - `volume` a docker volume with the given `Name`.
+          - `image` a docker image
           - `tmpfs` a `tmpfs`.
           - `npipe` a named pipe from the host into the container.
           - `cluster` a Swarm cluster volume
@@ -219,6 +220,7 @@ definitions:
         enum:
           - "bind"
           - "volume"
+          - "image"
           - "tmpfs"
           - "npipe"
           - "cluster"
@@ -350,6 +352,7 @@ definitions:
 
           - `bind` Mounts a file or directory from the host into the container. Must exist prior to creating the container.
           - `volume` Creates a volume with the given name and options (or uses a pre-existing volume with the same name and options). These are **not** removed when the container is removed.
+          - `image` Mounts an image.
           - `tmpfs` Create a tmpfs with the given options. The mount source cannot be specified for tmpfs.
           - `npipe` Mounts a named pipe from the host into the container. Must exist prior to creating the container.
           - `cluster` a Swarm cluster volume
@@ -357,6 +360,7 @@ definitions:
         enum:
           - "bind"
           - "volume"
+          - "image"
           - "tmpfs"
           - "npipe"
           - "cluster"
@@ -431,6 +435,14 @@ definitions:
             description: "Source path inside the volume. Must be relative without any back traversals."
             type: "string"
             example: "dir-inside-volume/subdirectory"
+      ImageOptions:
+        description: "Optional configuration for the `image` type."
+        type: "object"
+        properties:
+          Subpath:
+            description: "Source path inside the image. Must be relative without any back traversals."
+            type: "string"
+            example: "dir-inside-image/subdirectory"
       TmpfsOptions:
         description: "Optional configuration for the `tmpfs` type."
         type: "object"
@@ -2004,6 +2016,21 @@ definitions:
           compatibility.
         x-nullable: true
         $ref: "#/definitions/OCIDescriptor"
+      Manifests:
+        description: |
+            Manifests is a list of image manifests available in this image. It
+            provides a more detailed view of the platform-specific image manifests or
+            other image-attached data like build attestations.
+
+            Only available if the daemon provides a multi-platform image store
+            and the `manifests` option is set in the inspect request.
+
+            WARNING: This is experimental and may change at any time without any backward
+            compatibility.
+        type: "array"
+        x-nullable: true
+        items:
+          $ref: "#/definitions/ImageManifestSummary"
       RepoTags:
         description: |
           List of image names/tags in the local image cache that reference this
@@ -2727,12 +2754,24 @@ definitions:
         type: "string"
       error:
         type: "string"
+        x-nullable: true
+        description: |-
+          errors encountered during the operation.
+
+
+          > **Deprecated**: This field is deprecated since API v1.4, and will be omitted in a future API version. Use the information in errorDetail instead.
       errorDetail:
         $ref: "#/definitions/ErrorDetail"
       status:
         type: "string"
       progress:
         type: "string"
+        x-nullable: true
+        description: |-
+          Progress is a pre-formatted presentation of progressDetail.
+
+
+          > **Deprecated**: This field is deprecated since API v1.8, and will be omitted in a future API version. Use the information in progressDetail instead.
       progressDetail:
         $ref: "#/definitions/ProgressDetail"
       aux:
@@ -2832,12 +2871,24 @@ definitions:
         type: "string"
       error:
         type: "string"
+        x-nullable: true
+        description: |-
+          errors encountered during the operation.
+
+
+          > **Deprecated**: This field is deprecated since API v1.4, and will be omitted in a future API version. Use the information in errorDetail instead.
       errorDetail:
         $ref: "#/definitions/ErrorDetail"
       status:
         type: "string"
       progress:
         type: "string"
+        x-nullable: true
+        description: |-
+          Progress is a pre-formatted presentation of progressDetail.
+
+
+          > **Deprecated**: This field is deprecated since API v1.8, and will be omitted in a future API version. Use the information in progressDetail instead.
       progressDetail:
         $ref: "#/definitions/ProgressDetail"
 
@@ -2846,10 +2897,24 @@ definitions:
     properties:
       error:
         type: "string"
+        x-nullable: true
+        description: |-
+          errors encountered during the operation.
+
+
+          > **Deprecated**: This field is deprecated since API v1.4, and will be omitted in a future API version. Use the information in errorDetail instead.
+      errorDetail:
+        $ref: "#/definitions/ErrorDetail"
       status:
         type: "string"
       progress:
         type: "string"
+        x-nullable: true
+        description: |-
+          Progress is a pre-formatted presentation of progressDetail.
+
+
+          > **Deprecated**: This field is deprecated since API v1.8, and will be omitted in a future API version. Use the information in progressDetail instead.
       progressDetail:
         $ref: "#/definitions/ProgressDetail"
 
@@ -2881,9 +2946,10 @@ definitions:
     example:
       message: "Something went wrong."
 
-  IdResponse:
+  IDResponse:
     description: "Response to an API call that returns just an Id"
     type: "object"
+    x-go-name: "IDResponse"
     required: ["Id"]
     properties:
       Id:
@@ -5043,6 +5109,17 @@ definitions:
       ImageID:
         description: "The ID of the image that this container was created from"
         type: "string"
+      ImageManifestDescriptor:
+        $ref: "#/definitions/OCIDescriptor"
+        x-nullable: true
+        description: |
+          OCI descriptor of the platform-specific manifest of the image
+          the container was created from.
+
+          Note: Only available if the daemon provides a multi-platform
+          image store.
+
+          This field is not populated in the `GET /system/df` endpoint.
       Command:
         description: "Command to run when starting the container"
         type: "string"
@@ -5298,6 +5375,21 @@ definitions:
         items:
           type: "string"
         example: []
+
+  ContainerUpdateResponse:
+    type: "object"
+    title: "ContainerUpdateResponse"
+    x-go-name: "UpdateResponse"
+    description: |-
+      Response for a successful container-update.
+    properties:
+      Warnings:
+        type: "array"
+        description: |-
+          Warnings encountered when updating the container.
+        items:
+          type: "string"
+        example: ["Published ports are discarded when using host network mode"]
 
   ContainerStatsResponse:
     description: |
@@ -5843,6 +5935,58 @@ definitions:
         format: "uint64"
         x-nullable: true
         example: 7593984
+
+  ContainerTopResponse:
+    type: "object"
+    x-go-name: "TopResponse"
+    title: "ContainerTopResponse"
+    description: |-
+      Container "top" response.
+    properties:
+      Titles:
+        description: "The ps column titles"
+        type: "array"
+        items:
+          type: "string"
+        example:
+          Titles:
+            - "UID"
+            - "PID"
+            - "PPID"
+            - "C"
+            - "STIME"
+            - "TTY"
+            - "TIME"
+            - "CMD"
+      Processes:
+        description: |-
+          Each process running in the container, where each process
+          is an array of values corresponding to the titles.
+        type: "array"
+        items:
+          type: "array"
+          items:
+            type: "string"
+        example:
+          Processes:
+            -
+              - "root"
+              - "13642"
+              - "882"
+              - "0"
+              - "17:03"
+              - "pts/0"
+              - "00:00:00"
+              - "/bin/bash"
+            -
+              - "root"
+              - "13735"
+              - "13642"
+              - "0"
+              - "17:06"
+              - "pts/0"
+              - "00:00:00"
+              - "sleep 10"
 
   ContainerWaitResponse:
     description: "OK response to ContainerWait operation"
@@ -8045,54 +8189,7 @@ paths:
         200:
           description: "no error"
           schema:
-            type: "object"
-            title: "ContainerTopResponse"
-            description: "OK response to ContainerTop operation"
-            properties:
-              Titles:
-                description: "The ps column titles"
-                type: "array"
-                items:
-                  type: "string"
-              Processes:
-                description: |
-                  Each process running in the container, where each is process
-                  is an array of values corresponding to the titles.
-                type: "array"
-                items:
-                  type: "array"
-                  items:
-                    type: "string"
-          examples:
-            application/json:
-              Titles:
-                - "UID"
-                - "PID"
-                - "PPID"
-                - "C"
-                - "STIME"
-                - "TTY"
-                - "TIME"
-                - "CMD"
-              Processes:
-                -
-                  - "root"
-                  - "13642"
-                  - "882"
-                  - "0"
-                  - "17:03"
-                  - "pts/0"
-                  - "00:00:00"
-                  - "/bin/bash"
-                -
-                  - "root"
-                  - "13735"
-                  - "13642"
-                  - "0"
-                  - "17:06"
-                  - "pts/0"
-                  - "00:00:00"
-                  - "sleep 10"
+            $ref: "#/definitions/ContainerTopResponse"
         404:
           description: "no such container"
           schema:
@@ -8533,14 +8630,7 @@ paths:
         200:
           description: "The container has been updated."
           schema:
-            type: "object"
-            title: "ContainerUpdateResponse"
-            description: "OK response to ContainerUpdate operation"
-            properties:
-              Warnings:
-                type: "array"
-                items:
-                  type: "string"
+            $ref: "#/definitions/ContainerUpdateResponse"
         404:
           description: "no such container"
           schema:
@@ -9448,7 +9538,26 @@ paths:
       parameters:
         - name: "keep-storage"
           in: "query"
+          description: |
+            Amount of disk space in bytes to keep for cache
+
+            > **Deprecated**: This parameter is deprecated and has been renamed to "reserved-space".
+            > It is kept for backward compatibility and will be removed in API v1.49.
+          type: "integer"
+          format: "int64"
+        - name: "reserved-space"
+          in: "query"
           description: "Amount of disk space in bytes to keep for cache"
+          type: "integer"
+          format: "int64"
+        - name: "max-used-space"
+          in: "query"
+          description: "Maximum amount of disk space allowed to keep for cache"
+          type: "integer"
+          format: "int64"
+        - name: "min-free-space"
+          in: "query"
+          description: "Target amount of free disk space after pruning"
           type: "integer"
           format: "int64"
         - name: "all"
@@ -9617,6 +9726,12 @@ paths:
           description: "Image name or id"
           type: "string"
           required: true
+        - name: "manifests"
+          in: "query"
+          description: "Include Manifests in the image summary."
+          type: "boolean"
+          default: false
+          required: false
       tags: ["Image"]
   /images/{name}/history:
     get:
@@ -10168,7 +10283,7 @@ paths:
         201:
           description: "no error"
           schema:
-            $ref: "#/definitions/IdResponse"
+            $ref: "#/definitions/IDResponse"
         404:
           description: "no such container"
           schema:
@@ -10562,7 +10677,7 @@ paths:
         201:
           description: "no error"
           schema:
-            $ref: "#/definitions/IdResponse"
+            $ref: "#/definitions/IDResponse"
         404:
           description: "no such container"
           schema:
@@ -13042,7 +13157,7 @@ paths:
         201:
           description: "no error"
           schema:
-            $ref: "#/definitions/IdResponse"
+            $ref: "#/definitions/IDResponse"
         409:
           description: "name conflicts with an existing object"
           schema:
@@ -13249,7 +13364,7 @@ paths:
         201:
           description: "no error"
           schema:
-            $ref: "#/definitions/IdResponse"
+            $ref: "#/definitions/IDResponse"
         409:
           description: "name conflicts with an existing object"
           schema:

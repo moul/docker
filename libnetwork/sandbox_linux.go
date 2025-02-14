@@ -207,6 +207,18 @@ func (sb *Sandbox) SetKey(ctx context.Context, basePath string) error {
 	return nil
 }
 
+// NetnsPath returns the network namespace's path and true, if a network has been
+// created - else the empty string and false.
+func (sb *Sandbox) NetnsPath() (path string, ok bool) {
+	sb.mu.Lock()
+	osSbox := sb.osSbox
+	sb.mu.Unlock()
+	if osSbox == nil {
+		return "", false
+	}
+	return osSbox.Key(), true
+}
+
 // IPv6Enabled determines whether a container supports IPv6.
 // IPv6 support can always be determined for host networking. For other network
 // types it can only be determined once there's a container namespace to probe,
@@ -274,7 +286,8 @@ func (sb *Sandbox) restoreOslSandbox() error {
 		if len(i.llAddrs) != 0 {
 			ifaceOptions = append(ifaceOptions, osl.WithLinkLocalAddresses(i.llAddrs))
 		}
-		interfaces[osl.Iface{SrcName: i.srcName, DstPrefix: i.dstPrefix}] = ifaceOptions
+		iface := osl.Iface{SrcName: i.srcName, DstPrefix: i.dstPrefix, DstName: i.dstName}
+		interfaces[iface] = ifaceOptions
 		if joinInfo != nil {
 			routes = append(routes, joinInfo.StaticRoutes...)
 		}
@@ -348,8 +361,9 @@ func (sb *Sandbox) populateNetworkResources(ctx context.Context, ep *Endpoint) e
 				ifaceOptions = append(ifaceOptions, osl.WithAdvertiseAddrInterval(interval))
 			}
 		}
+		ifaceOptions = append(ifaceOptions, osl.WithCreatedInContainer(i.createdInContainer))
 
-		if err := sb.osSbox.AddInterface(ctx, i.srcName, i.dstPrefix, ifaceOptions...); err != nil {
+		if err := sb.osSbox.AddInterface(ctx, i.srcName, i.dstPrefix, i.dstName, ifaceOptions...); err != nil {
 			return fmt.Errorf("failed to add interface %s to sandbox: %v", i.srcName, err)
 		}
 

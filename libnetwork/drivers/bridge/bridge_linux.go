@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"github.com/containerd/log"
 	"github.com/docker/docker/errdefs"
@@ -26,6 +27,7 @@ import (
 	"github.com/docker/docker/libnetwork/types"
 	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -165,6 +167,7 @@ const (
 	gwModeNAT       gwMode = "nat"
 	gwModeNATUnprot gwMode = "nat-unprotected"
 	gwModeRouted    gwMode = "routed"
+	gwModeIsolated  gwMode = "isolated"
 )
 
 // New constructs a new bridge driver
@@ -233,7 +236,7 @@ func ValidateFixedCIDRV6(val string) error {
 // Whatever can be assessed a priori before attempting any programming.
 func (c *networkConfiguration) Validate() error {
 	if c.Mtu < 0 {
-		return ErrInvalidMtu(c.Mtu)
+		return errdefs.InvalidParameter(fmt.Errorf("invalid MTU number: %d", c.Mtu))
 	}
 
 	if c.EnableIPv4 {
@@ -244,7 +247,7 @@ func (c *networkConfiguration) Validate() error {
 		// If default gw is specified, it must be part of bridge subnet
 		if c.DefaultGatewayIPv4 != nil {
 			if !c.AddressIPv4.Contains(c.DefaultGatewayIPv4) {
-				return &ErrInvalidGateway{}
+				return errInvalidGateway
 			}
 		}
 	}
@@ -264,7 +267,7 @@ func (c *networkConfiguration) Validate() error {
 		}
 		// If a default gw is specified, it must belong to AddressIPv6's subnet
 		if c.DefaultGatewayIPv6 != nil && !c.AddressIPv6.Contains(c.DefaultGatewayIPv6) {
-			return &ErrInvalidGateway{}
+			return errInvalidGateway
 		}
 	}
 
@@ -367,6 +370,8 @@ func newGwMode(gwMode string) (gwMode, error) {
 		return gwModeNATUnprot, nil
 	case "routed":
 		return gwModeRouted, nil
+	case "isolated":
+		return gwModeIsolated, nil
 	}
 	return gwModeDefault, fmt.Errorf("unknown gateway mode %s", gwMode)
 }
@@ -377,6 +382,10 @@ func (m gwMode) routed() bool {
 
 func (m gwMode) unprotected() bool {
 	return m == gwModeNATUnprot
+}
+
+func (m gwMode) isolated() bool {
+	return m == gwModeIsolated
 }
 
 func parseErr(label, value, errString string) error {
@@ -445,7 +454,7 @@ func (n *bridgeNetwork) getPortDriverClient() portDriverClient {
 
 func (n *bridgeNetwork) getEndpoint(eid string) (*bridgeEndpoint, error) {
 	if eid == "" {
-		return nil, InvalidEndpointIDError(eid)
+		return nil, invalidEndpointIDError(eid)
 	}
 
 	n.Lock()
@@ -497,7 +506,7 @@ func (d *driver) configure(option map[string]interface{}) error {
 	case nil:
 		// No GenericData option set. Use defaults.
 	default:
-		return &ErrInvalidDriverConfig{}
+		return errdefs.InvalidParameter(fmt.Errorf("invalid configuration type (%T) passed", opt))
 	}
 
 	if config.EnableIPTables {
@@ -705,6 +714,10 @@ func parseNetworkOptions(id string, option options.Generic) (*networkConfigurati
 		return nil, err
 	}
 
+	if (config.GwModeIPv4.isolated() || config.GwModeIPv6.isolated()) && !config.Internal {
+		return nil, fmt.Errorf("gateway mode 'isolated' can only be used for an internal network")
+	}
+
 	if !exists {
 		config.BridgeIfaceCreator = ifaceCreatedByLibnetwork
 	} else {
@@ -749,10 +762,12 @@ func (d *driver) GetSkipGwAlloc(opts options.Generic) (ipv4, ipv6 bool, _ error)
 	if err != nil {
 		return false, false, err
 	}
-	// cfg.InhibitIPv4 means no gateway address will be assigned to the bridge, if
-	// the network is also cfg.Internal, there will not be a default route to use
-	// the gateway address either.
-	return cfg.InhibitIPv4 && cfg.Internal, false, nil
+	// An isolated network should not have a gateway. Also, cfg.InhibitIPv4 means no
+	// gateway address will be assigned to the bridge. So, if the network is also
+	// cfg.Internal, there will not be a default route to use the gateway address.
+	ipv4 = cfg.GwModeIPv4.isolated() || (cfg.InhibitIPv4 && cfg.Internal)
+	ipv6 = cfg.GwModeIPv6.isolated()
+	return ipv4, ipv6, nil
 }
 
 // CreateNetwork creates a new network using the bridge driver.
@@ -1114,7 +1129,7 @@ func (d *driver) CreateEndpoint(ctx context.Context, nid, eid string, ifInfo dri
 	n.Lock()
 	if n.id != nid {
 		n.Unlock()
-		return InvalidNetworkIDError(nid)
+		return invalidNetworkIDError(nid)
 	}
 	n.Unlock()
 
@@ -1157,12 +1172,12 @@ func (d *driver) CreateEndpoint(ctx context.Context, nid, eid string, ifInfo dri
 	}
 
 	// Generate and add the interface pipe host <-> sandbox
-	veth := &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
-		PeerName:  containerIfName,
-	}
-	if err = d.nlh.LinkAdd(veth); err != nil {
-		return types.InternalErrorf("failed to add the host (%s) <=> sandbox (%s) pair interfaces: %v", hostIfName, containerIfName, err)
+	nlhSb := d.nlh
+	if nlh, err := createVeth(ctx, hostIfName, containerIfName, ifInfo, d.nlh); err != nil {
+		return err
+	} else if nlh != nil {
+		defer nlh.Close()
+		nlhSb = *nlh
 	}
 
 	// Get the host side pipe interface handler
@@ -1179,13 +1194,13 @@ func (d *driver) CreateEndpoint(ctx context.Context, nid, eid string, ifInfo dri
 	}()
 
 	// Get the sandbox side pipe interface handler
-	sbox, err := d.nlh.LinkByName(containerIfName)
+	sbox, err := nlhSb.LinkByName(containerIfName)
 	if err != nil {
 		return types.InternalErrorf("failed to find sandbox side interface %s: %v", containerIfName, err)
 	}
 	defer func() {
 		if err != nil {
-			if err := d.nlh.LinkDel(sbox); err != nil {
+			if err := nlhSb.LinkDel(sbox); err != nil {
 				log.G(ctx).WithError(err).Warnf("Failed to delete sandbox side interface (%s)'s link", containerIfName)
 			}
 		}
@@ -1201,7 +1216,7 @@ func (d *driver) CreateEndpoint(ctx context.Context, nid, eid string, ifInfo dri
 		if err != nil {
 			return types.InternalErrorf("failed to set MTU on host interface %s: %v", hostIfName, err)
 		}
-		err = d.nlh.LinkSetMTU(sbox, config.Mtu)
+		err = nlhSb.LinkSetMTU(sbox, config.Mtu)
 		if err != nil {
 			return types.InternalErrorf("failed to set MTU on sandbox interface %s: %v", containerIfName, err)
 		}
@@ -1248,6 +1263,58 @@ func (d *driver) CreateEndpoint(ctx context.Context, nid, eid string, ifInfo dri
 	return nil
 }
 
+// createVeth creates a veth device with one end in the container's network namespace,
+// if it can get hold of the netns path and open the handles. In that case, it returns
+// a netlink handle in the container's namespace that must be closed by the caller.
+//
+// If the netns path isn't available, possibly because the netns hasn't been created
+// yet, or it's not possible to get a netns or netlink handle in the container's
+// namespace - both ends of the veth device are created in nlh's netns, and no netlink
+// handle is returned.
+//
+// (Only the error from creating the interface is returned. Failure to create the
+// interface in the container's netns is not an error.)
+func createVeth(ctx context.Context, hostIfName, containerIfName string, ifInfo driverapi.InterfaceInfo, nlh nlwrap.Handle) (nlhCtr *nlwrap.Handle, retErr error) {
+	veth := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{Name: hostIfName, TxQLen: 0},
+		PeerName:  containerIfName,
+	}
+
+	if nspath := ifInfo.NetnsPath(); nspath == "" {
+		log.G(ctx).WithField("ifname", containerIfName).Debug("No container netns path, creating interface in host netns")
+	} else if netnsh, err := netns.GetFromPath(nspath); err != nil {
+		log.G(ctx).WithFields(log.Fields{
+			"error":  err,
+			"netns":  nspath,
+			"ifname": containerIfName,
+		}).Warn("No container netns, creating interface in host netns")
+	} else {
+		defer netnsh.Close()
+
+		if nh, err := nlwrap.NewHandleAt(netnsh, syscall.NETLINK_ROUTE); err != nil {
+			log.G(ctx).WithFields(log.Fields{
+				"error": err,
+				"netns": nspath,
+			}).Warn("No netlink handle for container, creating interface in host netns")
+		} else {
+			defer func() {
+				if retErr != nil {
+					nh.Close()
+				}
+			}()
+
+			veth.PeerNamespace = netlink.NsFd(netnsh)
+			nlhCtr = &nh
+			ifInfo.SetCreatedInContainer(true)
+		}
+	}
+
+	if err := nlh.LinkAdd(veth); err != nil {
+		return nil, types.InternalErrorf("failed to add the host (%s) <=> sandbox (%s) pair interfaces: %v", hostIfName, containerIfName, err)
+	}
+	return nlhCtr, nil
+}
+
 func (d *driver) linkUp(ctx context.Context, host netlink.Link) error {
 	ctx, span := otel.Tracer("").Start(ctx, "libnetwork.drivers.bridge.linkUp", trace.WithAttributes(
 		attribute.String("host", host.Attrs().Name)))
@@ -1275,7 +1342,7 @@ func (d *driver) DeleteEndpoint(nid, eid string) error {
 	n.Lock()
 	if n.id != nid {
 		n.Unlock()
-		return InvalidNetworkIDError(nid)
+		return invalidNetworkIDError(nid)
 	}
 	n.Unlock()
 
@@ -1285,7 +1352,7 @@ func (d *driver) DeleteEndpoint(nid, eid string) error {
 		return err
 	}
 	if ep == nil {
-		return EndpointNotFoundError(eid)
+		return endpointNotFoundError(eid)
 	}
 
 	// Remove it
@@ -1336,7 +1403,7 @@ func (d *driver) EndpointOperInfo(nid, eid string) (map[string]interface{}, erro
 	n.Lock()
 	if n.id != nid {
 		n.Unlock()
-		return nil, InvalidNetworkIDError(nid)
+		return nil, invalidNetworkIDError(nid)
 	}
 	n.Unlock()
 
@@ -1377,7 +1444,7 @@ func (d *driver) EndpointOperInfo(nid, eid string) (map[string]interface{}, erro
 }
 
 // Join method is invoked when a Sandbox is attached to an endpoint.
-func (d *driver) Join(ctx context.Context, nid, eid string, sboxKey string, jinfo driverapi.JoinInfo, options map[string]interface{}) error {
+func (d *driver) Join(ctx context.Context, nid, eid string, sboxKey string, jinfo driverapi.JoinInfo, epOpts, sbOpts map[string]interface{}) error {
 	ctx, span := otel.Tracer("").Start(ctx, "libnetwork.drivers.bridge.Join", trace.WithAttributes(
 		attribute.String("nid", nid),
 		attribute.String("eid", eid),
@@ -1395,10 +1462,10 @@ func (d *driver) Join(ctx context.Context, nid, eid string, sboxKey string, jinf
 	}
 
 	if endpoint == nil {
-		return EndpointNotFoundError(eid)
+		return endpointNotFoundError(eid)
 	}
 
-	endpoint.containerConfig, err = parseContainerOptions(options)
+	endpoint.containerConfig, err = parseContainerOptions(sbOpts)
 	if err != nil {
 		return err
 	}
@@ -1408,7 +1475,7 @@ func (d *driver) Join(ctx context.Context, nid, eid string, sboxKey string, jinf
 	if network.config.ContainerIfacePrefix != "" {
 		containerVethPrefix = network.config.ContainerIfacePrefix
 	}
-	if err := iNames.SetNames(endpoint.srcName, containerVethPrefix); err != nil {
+	if err := iNames.SetNames(endpoint.srcName, containerVethPrefix, netlabel.GetIfname(epOpts)); err != nil {
 		return err
 	}
 
@@ -1437,7 +1504,7 @@ func (d *driver) Leave(nid, eid string) error {
 	}
 
 	if endpoint == nil {
-		return EndpointNotFoundError(eid)
+		return endpointNotFoundError(eid)
 	}
 
 	if !network.config.EnableICC {
@@ -1466,7 +1533,7 @@ func (d *driver) ProgramExternalConnectivity(ctx context.Context, nid, eid strin
 	}
 
 	if endpoint == nil {
-		return EndpointNotFoundError(eid)
+		return endpointNotFoundError(eid)
 	}
 
 	endpoint.extConnConfig, err = parseConnectivityOptions(options)
@@ -1526,7 +1593,7 @@ func (d *driver) RevokeExternalConnectivity(nid, eid string) error {
 	}
 
 	if endpoint == nil {
-		return EndpointNotFoundError(eid)
+		return endpointNotFoundError(eid)
 	}
 
 	err = network.releasePorts(endpoint)
@@ -1584,7 +1651,7 @@ func (d *driver) link(network *bridgeNetwork, endpoint *bridgeEndpoint, enable b
 				return err
 			}
 			if parentEndpoint == nil {
-				return InvalidEndpointIDError(p)
+				return invalidEndpointIDError(p)
 			}
 
 			l, err := newLink(parentEndpoint.addr.IP, endpoint.addr.IP, ec.ExposedPorts, network.config.BridgeName)
@@ -1608,7 +1675,7 @@ func (d *driver) link(network *bridgeNetwork, endpoint *bridgeEndpoint, enable b
 			return err
 		}
 		if childEndpoint == nil {
-			return InvalidEndpointIDError(c)
+			return invalidEndpointIDError(c)
 		}
 		if childEndpoint.extConnConfig == nil || childEndpoint.extConnConfig.ExposedPorts == nil {
 			continue

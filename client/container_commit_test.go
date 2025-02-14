@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/errdefs"
 	"gotest.tools/v3/assert"
@@ -23,6 +22,14 @@ func TestContainerCommitError(t *testing.T) {
 	}
 	_, err := client.ContainerCommit(context.Background(), "nothing", container.CommitOptions{})
 	assert.Check(t, is.ErrorType(err, errdefs.IsSystem))
+
+	_, err = client.ContainerCommit(context.Background(), "", container.CommitOptions{})
+	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
+	assert.Check(t, is.ErrorContains(err, "value is empty"))
+
+	_, err = client.ContainerCommit(context.Background(), "    ", container.CommitOptions{})
+	assert.Check(t, is.ErrorType(err, errdefs.IsInvalidParameter))
+	assert.Check(t, is.ErrorContains(err, "value is empty"))
 }
 
 func TestContainerCommit(t *testing.T) {
@@ -69,7 +76,7 @@ func TestContainerCommit(t *testing.T) {
 			if len(changes) != len(expectedChanges) {
 				return nil, fmt.Errorf("expected container changes size to be '%d', got %d", len(expectedChanges), len(changes))
 			}
-			b, err := json.Marshal(types.IDResponse{
+			b, err := json.Marshal(container.CommitResponse{
 				ID: "new_container_id",
 			})
 			if err != nil {

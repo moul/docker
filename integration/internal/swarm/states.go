@@ -66,6 +66,8 @@ func RunningTasksCount(ctx context.Context, client client.ServiceAPIClient, serv
 				if task.Status.Err != "" {
 					taskError = task.Status.Err
 				}
+			default:
+				// not interested in other states.
 			}
 		}
 
@@ -87,7 +89,7 @@ func RunningTasksCount(ctx context.Context, client client.ServiceAPIClient, serv
 // JobComplete is a poll function for determining that a ReplicatedJob is
 // completed additionally, while polling, it verifies that the job never
 // exceeds MaxConcurrent running tasks
-func JobComplete(ctx context.Context, client client.CommonAPIClient, service swarmtypes.Service) func(log poll.LogT) poll.Result {
+func JobComplete(ctx context.Context, client client.ServiceAPIClient, service swarmtypes.Service) func(log poll.LogT) poll.Result {
 	filter := filters.NewArgs(filters.Arg("service", service.ID))
 
 	var jobIteration swarmtypes.Version
@@ -125,6 +127,8 @@ func JobComplete(ctx context.Context, client client.CommonAPIClient, service swa
 				runningID = append(runningID, task.ID)
 			case swarmtypes.TaskStateComplete:
 				completed++
+			default:
+				// not interested in other states.
 			}
 		}
 

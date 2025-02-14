@@ -85,14 +85,14 @@ func FrozenImagesLinux(ctx context.Context, client client.APIClient, images ...s
 func imageExists(ctx context.Context, client client.APIClient, name string) bool {
 	ctx, span := otel.Tracer("").Start(ctx, "check image exists: "+name)
 	defer span.End()
-	_, _, err := client.ImageInspectWithRaw(ctx, name)
+	_, err := client.ImageInspect(ctx, name)
 	if err != nil {
 		span.RecordError(err)
 	}
 	return err == nil
 }
 
-func loadFrozenImages(ctx context.Context, client client.APIClient) error {
+func loadFrozenImages(ctx context.Context, apiClient client.APIClient) error {
 	ctx, span := otel.Tracer("").Start(ctx, "load frozen images")
 	defer span.End()
 
@@ -111,7 +111,7 @@ func loadFrozenImages(ctx context.Context, client client.APIClient) error {
 	tarCmd.Start()
 	defer tarCmd.Wait()
 
-	resp, err := client.ImageLoad(ctx, out, image.LoadOptions{Quiet: true})
+	resp, err := apiClient.ImageLoad(ctx, out, client.ImageLoadWithQuiet(true))
 	if err != nil {
 		return errors.Wrap(err, "failed to load frozen images")
 	}

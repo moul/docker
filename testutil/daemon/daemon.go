@@ -1,3 +1,6 @@
+// FIXME(thaJeztah): remove once we are a module; the go:build directive prevents go from downgrading language version to go1.16:
+//go:build go1.22
+
 package daemon // import "github.com/docker/docker/testutil/daemon"
 
 import (
@@ -19,7 +22,6 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/events"
-	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/system"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/container"
@@ -856,20 +858,24 @@ func (d *Daemon) SetEnvVar(name, val string) {
 
 // LoadBusybox image into the daemon
 func (d *Daemon) LoadBusybox(ctx context.Context, t testing.TB) {
+	d.LoadImage(ctx, t, "busybox:latest")
+}
+
+func (d *Daemon) LoadImage(ctx context.Context, t testing.TB, img string) {
 	t.Helper()
 	clientHost, err := client.NewClientWithOpts(client.FromEnv)
 	assert.NilError(t, err, "[%s] failed to create client", d.id)
 	defer clientHost.Close()
 
-	reader, err := clientHost.ImageSave(ctx, []string{"busybox:latest"}, image.SaveOptions{})
-	assert.NilError(t, err, "[%s] failed to download busybox", d.id)
+	reader, err := clientHost.ImageSave(ctx, []string{img})
+	assert.NilError(t, err, "[%s] failed to download %s", d.id, img)
 	defer reader.Close()
 
 	c := d.NewClientT(t)
 	defer c.Close()
 
-	resp, err := c.ImageLoad(ctx, reader, image.LoadOptions{Quiet: true})
-	assert.NilError(t, err, "[%s] failed to load busybox", d.id)
+	resp, err := c.ImageLoad(ctx, reader, client.ImageLoadWithQuiet(true))
+	assert.NilError(t, err, "[%s] failed to load %s", d.id, img)
 	defer resp.Body.Close()
 }
 

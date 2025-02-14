@@ -416,6 +416,14 @@ func (v *View) transform(ctr *Container) *Snapshot {
 	}
 	snapshot.NetworkSettings = &container.NetworkSettingsSummary{Networks: networks}
 
+	if ctr.ImageManifest != nil {
+		imageManifest := *ctr.ImageManifest
+		if imageManifest.Platform == nil {
+			imageManifest.Platform = &ctr.ImagePlatform
+		}
+		snapshot.Summary.ImageManifestDescriptor = &imageManifest
+	}
+
 	return snapshot
 }
 

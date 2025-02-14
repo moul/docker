@@ -8,7 +8,7 @@ module github.com/docker/docker
 go 1.22.0
 
 require (
-	cloud.google.com/go/compute/metadata v0.5.0
+	cloud.google.com/go/compute/metadata v0.5.2
 	cloud.google.com/go/logging v1.9.0
 	code.cloudfoundry.org/clock v1.1.0
 	dario.cat/mergo v1.0.1
@@ -60,10 +60,10 @@ require (
 	github.com/hashicorp/serf v0.8.5
 	github.com/ishidawataru/sctp v0.0.0-20230406120618-7ff4192f6ff2
 	github.com/klauspost/compress v1.17.11
-	github.com/miekg/dns v1.1.57
+	github.com/miekg/dns v1.1.61
 	github.com/mistifyio/go-zfs/v3 v3.0.1
 	github.com/mitchellh/copystructure v1.2.0
-	github.com/moby/buildkit v0.19.0
+	github.com/moby/buildkit v0.20.0-rc2
 	github.com/moby/docker-image-spec v1.3.1
 	github.com/moby/ipvs v1.1.0
 	github.com/moby/locker v1.0.1
@@ -91,10 +91,10 @@ require (
 	github.com/rootless-containers/rootlesskit/v2 v2.3.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.6
 	github.com/tonistiigi/go-archvariant v1.0.0
 	github.com/vbatts/tar-split v0.11.6
-	github.com/vishvananda/netlink v1.3.1-0.20240922070040-084abd93d350
+	github.com/vishvananda/netlink v1.3.1-0.20250209162617-655392bc778a
 	github.com/vishvananda/netns v0.0.5
 	go.etcd.io/bbolt v1.3.11
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.56.0
@@ -110,9 +110,9 @@ require (
 	golang.org/x/text v0.21.0
 	golang.org/x/time v0.6.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20241021214115-324edc3d5d38
-	google.golang.org/grpc v1.68.1
+	google.golang.org/grpc v1.69.4
 	google.golang.org/protobuf v1.35.2
-	gotest.tools/v3 v3.5.1
+	gotest.tools/v3 v3.5.2
 	resenje.org/singleflight v0.4.3
 	tags.cncf.io/container-device-interface v0.8.0
 )
@@ -121,6 +121,9 @@ require (
 	cloud.google.com/go v0.112.0 // indirect
 	cloud.google.com/go/longrunning v0.5.4 // indirect
 	github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20231105174938-2b5cbb29f3e2 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/anchore/go-struct-converter v0.0.0-20221118182256-c68fdcfa2092 // indirect
 	github.com/armon/circbuf v0.0.0-20190214190532-5111143e8da2 // indirect
@@ -143,7 +146,7 @@ require (
 	github.com/container-storage-interface/spec v1.5.0 // indirect
 	github.com/containerd/console v1.0.4 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
-	github.com/containerd/go-cni v1.1.11 // indirect
+	github.com/containerd/go-cni v1.1.12 // indirect
 	github.com/containerd/go-runc v1.1.0 // indirect
 	github.com/containerd/nydus-snapshotter v0.15.0 // indirect
 	github.com/containerd/plugin v1.0.0 // indirect
@@ -184,14 +187,16 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626 // indirect
-	github.com/package-url/packageurl-go v0.1.1-0.20220428063043-89078438f170 // indirect
+	github.com/package-url/packageurl-go v0.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
+	github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7 // indirect
 	github.com/philhofer/fwd v1.1.2 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.55.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.4.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
@@ -201,7 +206,7 @@ require (
 	github.com/tinylib/msgp v1.1.8 // indirect
 	github.com/tonistiigi/dchapes-mode v0.0.0-20241001053921-ca0759fec205 // indirect
 	github.com/tonistiigi/fsutil v0.0.0-20250113203817-b14e27f4135a // indirect
-	github.com/tonistiigi/go-actions-cache v0.0.0-20241210095730-017636a73805 // indirect
+	github.com/tonistiigi/go-actions-cache v0.0.0-20250211194249-bd99cf5bbc65 // indirect
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240710180619-ddb21b71c0b4 // indirect
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea // indirect
 	github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab // indirect

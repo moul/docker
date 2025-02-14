@@ -51,7 +51,7 @@ type Driver interface {
 	EndpointOperInfo(nid, eid string) (map[string]interface{}, error)
 
 	// Join method is invoked when a Sandbox is attached to an endpoint.
-	Join(ctx context.Context, nid, eid string, sboxKey string, jinfo JoinInfo, options map[string]interface{}) error
+	Join(ctx context.Context, nid, eid string, sboxKey string, jinfo JoinInfo, epOpts, sbOpts map[string]interface{}) error
 
 	// Leave method is invoked when a Sandbox detaches from an endpoint.
 	Leave(nid, eid string) error
@@ -127,13 +127,23 @@ type InterfaceInfo interface {
 
 	// AddressIPv6 returns the IPv6 address.
 	AddressIPv6() *net.IPNet
+
+	// NetnsPath returns the path of the network namespace, if there is one. Else "".
+	NetnsPath() string
+
+	// SetCreatedInContainer can be called by the driver to indicate that it's
+	// created the network interface in the container's network namespace (so,
+	// it doesn't need to be moved there).
+	SetCreatedInContainer(bool)
 }
 
 // InterfaceNameInfo provides a go interface for the drivers to assign names
 // to interfaces.
 type InterfaceNameInfo interface {
-	// SetNames method assigns the srcName and dstPrefix for the interface.
-	SetNames(srcName, dstPrefix string) error
+	// SetNames method assigns the srcName, dstPrefix, and dstName for the
+	// interface. If both dstName and dstPrefix are set, dstName takes
+	// precedence.
+	SetNames(srcName, dstPrefix, dstName string) error
 }
 
 // JoinInfo represents a set of resources that the driver has the ability to provide during
