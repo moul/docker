@@ -251,7 +251,7 @@ require (
 	tags.cncf.io/container-device-interface/specs-go v1.0.0 // indirect
 )
 
-require github.com/docker/docker v28.2.2+incompatible // indirect
+require github.com/docker/docker v28.3.3+incompatible // indirect
 
 exclude (
 	// These dependencies were updated to "master" in some modules we depend on,
